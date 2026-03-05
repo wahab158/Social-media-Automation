@@ -1,0 +1,13 @@
+gspread
+google-auth
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+requests
+feedparser
+openai
+python-dotenv
+schedule
+fastapi
+uvicorn
+tavily-python
