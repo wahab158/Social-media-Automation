@@ -12,6 +12,7 @@ import {
   Plus
 } from 'lucide-react';
 import './App.css';
+import ChatWizard from './ChatWizard';
 
 const API_BASE = 'http://localhost:8001/api';
 
@@ -91,6 +92,8 @@ function App() {
           <a href="#" className="nav-item"><Calendar size={20} /> Schedule</a>
           <a href="#" className="nav-item"><Settings size={20} /> Settings</a>
         </nav>
+
+        <ChatWizard onRefresh={fetchData} />
       </aside>
 
       {/* Main Area */}

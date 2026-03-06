@@ -24,14 +24,13 @@ class DriveHelper:
         creds = Credentials.from_service_account_file(self.credentials_path, scopes=SCOPES)
         self.service = build('drive', 'v3', credentials=creds)
 
-    def list_videos(self):
-        """Lists video files in the specified folder that haven't been processed."""
+    def list_media(self):
+        """Lists video and image files in the specified folder."""
         if self.service is None:
             self.connect()
 
-        # Query for video files in the specific folder
-        # We can look for mimeType starting with 'video/'
-        query = f"'{self.folder_id}' in parents and mimeType contains 'video/' and trashed = false"
+        # Query for video or image files in the specific folder
+        query = f"'{self.folder_id}' in parents and (mimeType contains 'video/' or mimeType contains 'image/') and trashed = false"
         results = self.service.files().list(
             q=query,
             pageSize=10,
@@ -48,18 +47,33 @@ class DriveHelper:
         file = self.service.files().get(fileId=file_id, fields='webViewLink').execute()
         return file.get('webViewLink')
 
+    def download_file(self, file_id, local_path):
+        """Downloads a file from Google Drive to the local filesystem."""
+        if self.service is None:
+            self.connect()
+
+        request = self.service.files().get_media(fileId=file_id)
+        fh = io.FileIO(local_path, 'wb')
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            print(f"  -> [DRIVE] Downloaded {int(status.progress() * 100)}%.")
+        
+        return local_path
+
 if __name__ == "__main__":
     # Quick test
     try:
         helper = DriveHelper()
         print("Connecting to Drive...")
         helper.connect()
-        print("Listing videos...")
-        videos = helper.list_videos()
-        if not videos:
-            print("No videos found in the specified folder.")
-        for v in videos:
-            print(f"Found Video: {v['name']} (ID: {v['id']})")
-            print(f"Link: {v['webViewLink']}")
+        print("Listing media...")
+        media = helper.list_media()
+        if not media:
+            print("No media found in the specified folder.")
+        for m in media:
+            print(f"Found Media: {m['name']} (ID: {m['id']})")
+            print(f"Link: {m['webViewLink']}")
     except Exception as e:
         print(f"Error: {e}")

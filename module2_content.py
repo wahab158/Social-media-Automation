@@ -85,13 +85,13 @@ def process_pending_news():
         print(f"Connection error: {e}")
         return
 
-    # Check for available videos in Drive
+    # Check for available media in Drive
     try:
-        drive_videos = drive.list_videos()
-        print(f"Found {len(drive_videos)} videos in Drive.")
+        drive_media = drive.list_media()
+        print(f"Found {len(drive_media)} media files in Drive.")
     except Exception as e:
-        print(f"Error listing Drive videos: {e}")
-        drive_videos = []
+        print(f"Error listing Drive media: {e}")
+        drive_media = []
 
     # Check for new news items
     pending_news = db.get_pending_news()
@@ -104,16 +104,16 @@ def process_pending_news():
             topic = input("Enter Headline/Topic: ")
             summary = input("Enter Summary: ")
             
-            # Use Drive video if available
+            # Use Drive media if available
             reel_url = ""
-            if drive_videos:
-                print("Available videos from Drive:")
-                for idx, v in enumerate(drive_videos):
+            if drive_media:
+                print("Available media from Drive:")
+                for idx, v in enumerate(drive_media):
                     print(f"[{idx}] {v['name']}")
-                v_choice = input(f"Select a video index (0-{len(drive_videos)-1}) or enter a URL manually: ")
-                if v_choice.isdigit() and 0 <= int(v_choice) < len(drive_videos):
-                    reel_url = drive_videos[int(v_choice)]['webViewLink']
-                    print(f"Selected: {drive_videos[int(v_choice)]['name']}")
+                v_choice = input(f"Select a media index (0-{len(drive_media)-1}) or enter a URL manually: ")
+                if v_choice.isdigit() and 0 <= int(v_choice) < len(drive_media):
+                    reel_url = drive_media[int(v_choice)]['webViewLink']
+                    print(f"Selected: {drive_media[int(v_choice)]['name']}")
                 else:
                     reel_url = v_choice
             else:
@@ -149,13 +149,13 @@ def process_pending_news():
         
         # User input required or select from Drive
         reel_url = ""
-        if drive_videos:
-             preferred_video = drive_videos[0]
+        if drive_media:
+             preferred_media = drive_media[0]
              # Prefer webContentLink for direct Ayrshare API downloads, fallback to webViewLink
-             reel_url = preferred_video.get('webContentLink', preferred_video.get('webViewLink'))
-             print(f"Auto-selected video from Drive: {preferred_video['name']}")
-             # Rotate video to the end of the list to reuse it across many news items
-             drive_videos.append(drive_videos.pop(0))
+             reel_url = preferred_media.get('webContentLink', preferred_media.get('webViewLink'))
+             print(f"Auto-selected media from Drive: {preferred_media['name']} ({preferred_media.get('mimeType')})")
+             # Rotate media to the end of the list to reuse it across many news items
+             drive_media.append(drive_media.pop(0))
         else:
             print(f"No Drive videos found. Using a fallback media URL for '{topic[:30]}...'")
             reel_url = "https://img.ayrshare.com/012/gb.jpg"
