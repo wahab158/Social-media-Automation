@@ -5,14 +5,24 @@ from groq import Groq
 from dotenv import load_dotenv
 from db_helper import DBHelper
 from drive_helper import DriveHelper
+from cloudinary_helper import CloudinaryHelper
+
+from sqlite_helper import get_api_key as sqlite_get_key
+import requests
 
 # Load environment variables
 load_dotenv()
 
-groq_api_key = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=groq_api_key) if groq_api_key else None
+def get_groq_client(user_id):
+    """Initializes Groq client using user's API key, or falls back to env var."""
+    api_key = None
+    if user_id:
+        api_key = sqlite_get_key(user_id, "groq", "api_key")
+    if not api_key:
+        api_key = os.getenv("GROQ_API_KEY")
+    return  Groq(api_key=api_key) if api_key else None
 
-def generate_captions(topic, summary):
+def generate_captions(topic, summary, client):
     """Uses OpenAI to generate platform-specific captions for IG, FB, LinkedIn, and X."""
     
     if not client:
@@ -26,23 +36,33 @@ def generate_captions(topic, summary):
         }
 
     prompt = f"""
-    You are an expert Social Media Manager. Write 4 distinct social media captions for the following tech news:
+    You are a world-class Social Media Content Creator. Your task is to write 4 distinct, high-impact social media captions.
     
-    Topic/Headline: {topic}
-    Summary: {summary}
+    CONTENT CONTEXT:
+    Topic: {topic}
+    Description/Details: {summary}
     
-    Rules for each platform:
-    1. Instagram ("ig"): Max 2,200 chars. Strong hook in the first line. Use line breaks, generous emojis. 3-5 hashtags max. Call-to-action to save/tag. Assume video format.
-    2. Facebook ("fb"): Storytelling format. 2-3 hashtags max. Ask a question to encourage comments. Include a link if relevant. 
-    3. LinkedIn ("li"): Max 3,000 chars. Professional tone. Hook/statistic. 3-5 industry hashtags. Include a key takeaway. Minimal emojis (1-2 max).
-    4. X/Twitter ("x"): STRICTLY LESS THAN 280 characters. Concise, punchy. 1-3 hashtags. Create curiosity. 
+    STRICT CONTENT RULES:
+    1. NEVER mention technical terms like "Cloudinary", "pinned image", "media link", "URL", "Vision AI", or "extracted text".
+    2. Treat visual details as your own direct observation. Instead of "the image shows a red car", say "this stunning red car...".
+    3. TONE: Professional, engaging, and authoritative.
+    4. Instagram, Facebook, LinkedIn: MINIMUM 15-20 lines of text. Use a storytelling approach.
+    5. Layout: Use headers like [THE NEWS], [CONTEXT], [IMPLICATIONS].
+    6. Hashtags: Exactly 7 hashtags at the very bottom.
     
-    Your response MUST be valid JSON in this exact format, with keys "ig", "fb", "li", "x". Do not include markdown code block formatting like ```json in your response, just the raw JSON object.
+    PLATFORM SPECIFICS:
+    - IG: Max 2200 chars. Story hook at the start.
+    - FB: Engaging and shared-interest focused.
+    - LI: Insightful, professional, and career-relevant. Use bullets for key points.
+    - X: Max 280 chars. Sharp headline format.
+    
+    OUTPUT FORMAT:
+    Return ONLY a raw JSON object. Use double quotes.
     {{
-        "ig": "instagram caption text here...",
-        "fb": "facebook caption text here...",
-        "li": "linkedin caption text here...",
-        "x": "x caption text here..."
+      "ig": "long caption here...",
+      "fb": "long caption here...",
+      "li": "long caption here...",
+      "x": "short tweet here..."
     }}
     """
     
@@ -51,94 +71,187 @@ def generate_captions(topic, summary):
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1500,
-            temperature=0.7
+            temperature=0.7,
+            timeout=30.0
         )
         
         output = response.choices[0].message.content.strip()
-        # Clean up any potential markdown formatting
-        if output.startswith("```json"):
-            output = output[7:-3].strip()
-        elif output.startswith("```"):
-            output = output[3:-3].strip()
+        
+        # Robust parsing logic
+        try:
+            # Clean possible markdown artifacts
+            clean_output = output
+            if "```json" in clean_output:
+                clean_output = clean_output.split("```json")[-1].split("```")[0].strip()
+            elif "```" in clean_output:
+                clean_output = clean_output.split("```")[-1].split("```")[0].strip()
             
-        captions = json.loads(output, strict=False)
-        return captions
+            # Find the first { and last }
+            start = clean_output.find('{')
+            end = clean_output.rfind('}')
+            if start != -1 and end != -1:
+                json_str = clean_output[start:end+1]
+                return json.loads(json_str, strict=False)
+            else:
+                raise ValueError("No valid JSON found in response")
+        except Exception as e:
+            print(f"Caption JSON parse error: {e}\nRaw output: {output}")
+            raise e
         
     except Exception as e:
-        print(f"OpenAI caption generation error: {e}")
+        print(f"Groq caption generation error: {e}")
         return {
-            "ig": "Error generating IG caption.",
+            "ig": "Error generating IG caption. Please try refining manually.",
             "fb": "Error generating FB caption.",
             "li": "Error generating LI caption.",
             "x": "Error generating X caption."
         }
 
-def process_pending_news():
-    print(f"[{datetime.now()}] Starting Content Creation Agent...")
+def generate_from_single_news(user_id, news_id):
+    """
+    Generates a draft from a specific news item fetched from the db by news_id.
+    It uploads the article's image to Cloudinary to ensure platform previews work.
+    """
+    print(f"[{datetime.now()}] Generating post from news {news_id} for user {user_id or 'System'}")
     
     try:
         db = DBHelper()
         db.connect()
-        drive = DriveHelper()
-        drive.connect()
+        news_item = db.get_news_by_id(news_id)
+        if not news_item:
+            return {"success": False, "error": "News item not found."}
+            
+        topic = news_item.get("title", "")
+        summary = news_item.get("summary", "")
+        source_url = news_item.get("source_url", "")
+        
+        # 1. Handle Media (Prioritize news item media_url)
+        final_media_url = news_item.get("media_url", "")
+        if not final_media_url:
+            # Fallback (can be left blank, frontend or publisher handles fallbacks)
+            final_media_url = ""
+            
+        # 2. Generate Captions
+        client = get_groq_client(user_id)
+        
+        # Append attribution to prompt context
+        extended_summary = f"{summary}\nSource: {source_url}"
+        captions = generate_captions(topic, extended_summary, client)
+        
+        new_idx = db.add_content_row(
+            topic=topic,
+            reel_url=final_media_url,
+            ig_caption=captions.get("ig", ""),
+            fb_caption=captions.get("fb", ""),
+            li_caption=captions.get("li", ""),
+            x_caption=captions.get("x", ""),
+            platforms="all",
+            schedule_time="now",
+            status="Draft",
+            user_id=user_id
+        )
+        
+        # 4. Mark News as Used
+        db.update_news_status_by_id(news_id, "Used")
+        
+        return {
+            "success": True, 
+            "row_index": new_idx, 
+            "topic": topic,
+            "caption": captions.get("ig", ""),
+            "reel_url": final_media_url
+        }
+
+        
+    except Exception as e:
+        print(f"Error generating from news: {e}")
+        return {"success": False, "error": str(e)}
+
+def generate_custom_post(user_id, custom_text):
+    """
+    Directly generates a draft from user-provided custom news text.
+    """
+    print(f"[{datetime.now()}] Generating custom post for user {user_id or 'System'}")
+    
+    try:
+        db = DBHelper()
+        db.connect()
+        
+        # Use AI to extract a short topic/title from the raw text
+        client = get_groq_client(user_id)
+        if client:
+            try:
+                topic_res = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": f"Extract a short 3-6 word news headline for this text:\n\n{custom_text}"}],
+                    max_tokens=20
+                )
+                topic = topic_res.choices[0].message.content.strip().strip('"')
+            except:
+                topic = custom_text[:50] + "..."
+        else:
+            topic = custom_text[:50] + "..."
+            
+        final_media_url = ""
+        # 2. Generate Captions
+        captions = generate_captions(topic, custom_text, client)
+            
+        new_idx = db.add_content_row(
+            topic=topic,
+            reel_url=final_media_url,
+            ig_caption=captions.get("ig", ""),
+            fb_caption=captions.get("fb", ""),
+            li_caption=captions.get("li", ""),
+            x_caption=captions.get("x", ""),
+            platforms="all",
+            schedule_time="now",
+            status="Draft",
+            user_id=user_id
+        )
+        
+        return {
+            "success": True, 
+            "row_index": new_idx, 
+            "topic": topic,
+            "caption": captions.get("ig", ""),
+            "reel_url": final_media_url
+        }
+
+    except Exception as e:
+        print(f"Error generating custom post: {e}")
+        return {"success": False, "error": str(e)}
+
+def process_pending_news_auto(media_url=None, user_id=None):
+    """Non-interactive version for API/server use. No input() calls."""
+    print(f"[{datetime.now()}] Starting Content Creation Agent (Auto Mode)...")
+    
+    try:
+        db = DBHelper()
+        db.connect()
     except Exception as e:
         print(f"Connection error: {e}")
-        return
+        return 0, [], None
 
-    # Check for available media in Drive
-    try:
-        drive_media = drive.list_media()
-        print(f"Found {len(drive_media)} media files in Drive.")
-    except Exception as e:
-        print(f"Error listing Drive media: {e}")
-        drive_media = []
+    fallback_media_url = media_url or ""
+    if not fallback_media_url:
+        try:
+            cl = CloudinaryHelper()
+            assets = cl.list_assets()
+            if assets:
+                fallback_media_url = assets[0]['url']
+                print(f"Using Cloudinary asset as fallback: {assets[0]['name']}")
+        except Exception as e:
+            print(f"Could not fetch Cloudinary fallback: {e}")
 
     # Check for new news items
     pending_news = db.get_pending_news()
     
     if not pending_news:
-        print("No new news items available in 'News Database'.")
-        # Ask user if they want to enter manually
-        choice = input("Would you like to enter a manual topic instead? (y/n): ")
-        if choice.lower() == 'y':
-            topic = input("Enter Headline/Topic: ")
-            summary = input("Enter Summary: ")
-            
-            # Use Drive media if available
-            reel_url = ""
-            if drive_media:
-                print("Available media from Drive:")
-                for idx, v in enumerate(drive_media):
-                    print(f"[{idx}] {v['name']}")
-                v_choice = input(f"Select a media index (0-{len(drive_media)-1}) or enter a URL manually: ")
-                if v_choice.isdigit() and 0 <= int(v_choice) < len(drive_media):
-                    reel_url = drive_media[int(v_choice)]['webViewLink']
-                    print(f"Selected: {drive_media[int(v_choice)]['name']}")
-                else:
-                    reel_url = v_choice
-            else:
-                reel_url = input("Enter Reel/Video URL (Required!): ")
+        print("No pending news items to process.")
+        return 0, [], None
 
-            while not reel_url.strip():
-                print("Error: Reel/Video URL is required by the system.")
-                reel_url = input("Enter Reel/Video URL: ")
-                
-            captions = generate_captions(topic, summary)
-            
-            db.add_content_row(
-                topic=topic,
-                reel_url=reel_url,
-                ig_caption=captions["ig"],
-                fb_caption=captions["fb"],
-                li_caption=captions["li"],
-                x_caption=captions["x"],
-                platforms="all", 
-                schedule_time="now", 
-                status="Draft"
-            )
-            print("Successfully manually generated and saved Content Queue Draft.")
-        return
-
+    count = 0
+    new_row_indices = []
     print(f"Found {len(pending_news)} pending news items.")
     for news_item in pending_news:
         topic = news_item.get("title", "")
@@ -147,43 +260,54 @@ def process_pending_news():
         
         print(f"\nProcessing '{topic[:50]}...'")
         
-        # User input required or select from Drive
-        reel_url = ""
-        if drive_media:
-             preferred_media = drive_media[0]
-             # Prefer webContentLink for direct Ayrshare API downloads, fallback to webViewLink
-             reel_url = preferred_media.get('webContentLink', preferred_media.get('webViewLink'))
-             print(f"Auto-selected media from Drive: {preferred_media['name']} ({preferred_media.get('mimeType')})")
-             # Rotate media to the end of the list to reuse it across many news items
-             drive_media.append(drive_media.pop(0))
-        else:
-            print(f"No Drive videos found. Using a fallback media URL for '{topic[:30]}...'")
-            reel_url = "https://img.ayrshare.com/012/gb.jpg"
+        reel_url = news_item.get("media_url") or fallback_media_url
             
-        # 1. Generate 4 captions
+        # Generate captions
         print("Generating AI captions...")
-        captions = generate_captions(topic, summary)
+        client = get_groq_client(user_id)
+        captions = generate_captions(topic, summary, client)
         
-        # 2. Save to Content Queue
         try:
-            db.add_content_row(
+            # db.add_content_row now returns the row index it was added to
+            new_idx = db.add_content_row(
                 topic=topic,
                 reel_url=reel_url,
                 ig_caption=captions.get("ig", ""),
                 fb_caption=captions.get("fb", ""),
                 li_caption=captions.get("li", ""),
                 x_caption=captions.get("x", ""),
-                platforms="all",    # Defaults
+                platforms="all",
                 schedule_time="now", 
-                status="Draft"
+                status="Draft",
+                user_id=user_id
             )
-            print("Successfully added to Content Queue as 'Draft'.")
-            
-            # 3. Mark news item as Used
-            db.update_news_status(row_index, "Used")
-            
+            print(f"Added to Content Queue as 'Draft' at row {new_idx}")
+            news_id_val = news_item.get('news_id')
+            if news_id_val:
+                db.update_news_status_by_id(news_id_val, "Used")
+            else:
+                db.update_news_status(row_index, "Used")
+            count += 1
+            new_row_indices.append(new_idx)
         except Exception as e:
             print(f"Error saving to Content Queue: {e}")
+    
+    first_draft = None
+    if new_row_indices:
+        # We only need the first one for the UI preview
+        first_draft = {
+            "topic": pending_news[0].get("title", ""),
+            "caption": captions.get("ig", ""),
+            "row_index": new_row_indices[0],
+            "reel_url": reel_url
+        }
+    
+    return count, new_row_indices, first_draft
+
+
+def process_pending_news():
+    """CLI-interactive version (for manual terminal use only)."""
+    process_pending_news_auto()
 
 if __name__ == "__main__":
     process_pending_news()

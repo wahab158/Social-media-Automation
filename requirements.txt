@@ -11,3 +11,15 @@ schedule
 fastapi
 uvicorn
 tavily-python
+cloudinary
+httpx
+python-jose[cryptography]
+bcrypt
+cryptography
+groq
+pydantic
+python-multipart
+python-jose
+jwt
+# For vision
+pillow
