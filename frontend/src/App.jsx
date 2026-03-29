@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import {
-  Radar, Eye, Image as ImageIcon, MessageSquare, Settings,
-  Sparkles, Send, CheckCircle,
-  Cloud, Upload, Trash2, Pin, X, RefreshCw, Loader2, LogOut, Newspaper, Search, CheckSquare,
-  Sun, Moon, Menu, Zap, Layers
-} from 'lucide-react';
 import './App.css';
 import ChatWizard from './ChatWizard';
 import ApprovalCard from './ApprovalCard';
 import { useAuth } from './context/AuthContext';
 import LoginPage from './LoginPage';
 import ApiKeyCard from './ApiKeyCard';
+import BrandIdentitySettings from './BrandIdentitySettings';
+import CalendarDashboard from './CalendarDashboard';
+import { 
+  Radar, Eye, Image as ImageIcon, MessageSquare, Settings,
+  Sparkles, Send, CheckCircle,
+  Cloud, Upload, Trash2, Pin, X, RefreshCw, Loader2, LogOut, Newspaper, Search, CheckSquare,
+  Sun, Moon, Menu, Zap, Layers,
+  User, ShieldCheck, Calendar as CalendarIcon, PieChart, Video 
+} from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000/api';
 
@@ -28,6 +31,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [pinnedImage, setPinnedImage] = useState(null);
+  const [activeBrand, setActiveBrand] = useState(null);
 
   // Persistence for AI Chat
   const [chatMessages, setChatMessages] = useState([
@@ -76,15 +80,24 @@ function App() {
     } catch (e) { console.error('Fetch news:', e); }
   }, []);
 
+  const fetchActiveBrand = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/brand-profiles/active`);
+      if (res.data.status === 'success') {
+        setActiveBrand(res.data.profile);
+      }
+    } catch (e) { console.error('Fetch active brand:', e); }
+  }, []);
+
   const fetchAll = useCallback(async () => {
     if (!user) return;
     setSyncing(true);
     try {
-      await Promise.all([fetchDrafts(), fetchHistory(), fetchMedia(), fetchNewsData()]);
+      await Promise.all([fetchDrafts(), fetchHistory(), fetchMedia(), fetchNewsData(), fetchActiveBrand()]);
     } catch (e) { console.error('Fetch all error:', e); }
     setSyncing(false);
     setLoading(false);
-  }, [fetchDrafts, fetchHistory, fetchMedia, fetchNewsData, user]);
+  }, [fetchDrafts, fetchHistory, fetchMedia, fetchNewsData, fetchActiveBrand, user]);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -171,76 +184,195 @@ function App() {
   };
 
   const navItems = [
-    { id: 'news', icon: Radar, label: 'News Radar', badge: news.filter(n => n.status === 'New').length > 0 },
-    { id: 'approval', icon: Eye, label: 'Media Vision Lab' },
-    { id: 'media', icon: ImageIcon, label: 'Media Gallery' },
-    { id: 'ai-chat', icon: MessageSquare, label: 'AI Expert Chat' },
+    { id: 'news', icon: 'newspaper', label: 'News Radar', badge: news.filter(n => n.status === 'New').length > 0 },
+    { id: 'approval', icon: 'science', label: 'Media Lab' },
+    { id: 'media', icon: 'collections', label: 'Media Gallery' },
+    { id: 'ai-chat', icon: 'forum', label: 'AI Chat' },
   ];
 
-  const NavButton = ({ item, active, onClick }) => (
-    <button 
-      className={`nav-item ${active ? 'active' : ''}`} 
-      onClick={onClick}
-      data-nav={item.id}
-    >
-      <div className="nav-item-icon-wrapper">
-        <item.icon size={20} />
-      </div>
-      <span>{item.label}</span>
-      {item.badge && <span className="nav-item-badge" />}
-    </button>
-  );
+  const viewLabels = {
+    'news': 'Intelligence Feed',
+    'approval': 'Media Vision Lab',
+    'media': 'Media Gallery',
+    'ai-chat': 'Agentic Chat',
+    'calendar': 'Agentic Planner',
+    'brand-identity': 'Identity DNA',
+    'settings': 'Settings',
+  };
 
   return (
-    <div className="dashboard">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="sidebar-brand-icon">
-            <Zap size={18} />
+    <div className={`min-h-screen ${theme}`} style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+      
+      {/* ═══ SIDEBAR — Stitch Faithful ═══ */}
+      <aside style={{
+        position: 'fixed', left: 0, top: 0, height: '100vh', width: '16rem',
+        display: 'flex', flexDirection: 'column', padding: '1.5rem',
+        background: 'var(--bg-sidebar)',
+        borderRadius: '0 2rem 2rem 0',
+        zIndex: 50,
+      }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '3rem', padding: '0 1rem' }}>
+          <div style={{
+            width: '40px', height: '40px', borderRadius: '50%',
+            background: 'var(--theme-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <span className="material-symbols-outlined" style={{ color: 'white', fontVariationSettings: "'FILL' 1" }}>biotech</span>
           </div>
-          <div className="sidebar-brand-text">
-            <span className="sidebar-brand-name">SocialAI</span>
-            <span className="sidebar-brand-label">Agent</span>
+          <div>
+            <h1 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Curator AI</h1>
+            <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Social AI Manager</p>
           </div>
         </div>
-        <nav>
+
+        {/* Navigation */}
+        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           {navItems.map(n => (
-            <NavButton key={n.id} item={n} active={view === n.id} onClick={() => setView(n.id)} />
+            <button
+              key={n.id}
+              onClick={() => setView(n.id)}
+              data-nav={n.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '1rem',
+                padding: '0.75rem 1rem', borderRadius: '9999px', border: 'none',
+                background: view === n.id ? 'var(--nav-active-bg)' : 'transparent',
+                color: view === n.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: view === n.id ? 700 : 500,
+                fontSize: '0.875rem', fontFamily: "'Inter', sans-serif",
+                cursor: 'pointer',
+                transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
+              }}
+              onMouseEnter={e => { if (view !== n.id) { e.currentTarget.style.color = '#5d4cbf'; e.currentTarget.style.boxShadow = '0 0 15px rgba(93,76,191,0.15)'; } }}
+              onMouseLeave={e => { if (view !== n.id) { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.boxShadow = 'none'; } }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{n.icon}</span>
+              <span style={{ letterSpacing: '-0.01em' }}>{n.label}</span>
+              {n.badge && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#ba1a1a', marginLeft: 'auto' }} />}
+            </button>
           ))}
-          <div className="nav-section-label">System</div>
-          <NavButton 
-            item={{ id: 'settings', icon: Settings, label: 'Settings' }} 
-            active={view === 'settings'} 
-            onClick={() => setView('settings')} 
-          />
+
+          <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '1rem 0.75rem' }} />
+
+          {/* Continuity Section */}
+          <button onClick={() => setView('calendar')} style={{
+            display: 'flex', alignItems: 'center', gap: '1rem',
+            padding: '0.75rem 1rem', borderRadius: '9999px', border: 'none',
+            background: view === 'calendar' ? 'var(--nav-active-bg)' : 'transparent',
+            color: view === 'calendar' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: view === 'calendar' ? 700 : 500,
+            fontSize: '0.875rem', fontFamily: "'Inter', sans-serif", cursor: 'pointer',
+            transition: 'all 0.3s',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>calendar_today</span>
+            <span>Calendar</span>
+          </button>
+          <button onClick={() => setView('brand-identity')} style={{
+            display: 'flex', alignItems: 'center', gap: '1rem',
+            padding: '0.75rem 1rem', borderRadius: '9999px', border: 'none',
+            background: view === 'brand-identity' ? 'var(--nav-active-bg)' : 'transparent',
+            color: view === 'brand-identity' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: view === 'brand-identity' ? 700 : 500,
+            fontSize: '0.875rem', fontFamily: "'Inter', sans-serif", cursor: 'pointer',
+            transition: 'all 0.3s',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>fingerprint</span>
+            <span>Brand DNA</span>
+          </button>
+
+          <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '1rem 0.75rem' }} />
+
+          <button onClick={() => setView('settings')} style={{
+            display: 'flex', alignItems: 'center', gap: '1rem',
+            padding: '0.75rem 1rem', borderRadius: '9999px', border: 'none',
+            background: view === 'settings' ? 'var(--nav-active-bg)' : 'transparent',
+            color: view === 'settings' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: view === 'settings' ? 700 : 500,
+            fontSize: '0.875rem', fontFamily: "'Inter', sans-serif", cursor: 'pointer',
+            transition: 'all 0.3s',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>settings</span>
+            <span>Settings</span>
+          </button>
         </nav>
-        <div className="sidebar-footer">
-          <NavButton 
-            item={{ id: 'logout', icon: LogOut, label: 'Sign Out' }} 
-            active={false} 
-            onClick={logout} 
-          />
-          <div className="sidebar-footer-info">
-            <Sparkles size={12} /> Powered by AI
+
+        {/* Sidebar Footer */}
+        <div style={{
+          marginTop: 'auto', padding: '1rem', borderRadius: '1rem',
+          background: 'var(--glass-bg)', display: 'flex', alignItems: 'center', gap: '0.75rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: 'var(--text-muted)' }}>account_circle</span>
+            <div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>{user?.email?.split('@')[0] || 'Curator'}</p>
+              <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Pro Plan</p>
+            </div>
           </div>
+          <button onClick={toggleTheme} style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', padding: '0.25rem',
+          }}>
+            {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+          </button>
+          <button onClick={logout} style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', padding: '0.25rem',
+          }} title="Sign Out">
+            <LogOut size={16} />
+          </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="main-content">
-        {/* Header Bar */}
-        <div className="header-bar">
-          <div className="admin-badge">
-            <span className="admin-dot" />
-            Admin
+      {/* ═══ TOP HEADER BAR — Stitch Faithful ═══ */}
+      <header style={{
+        position: 'fixed', top: 0, marginLeft: '16rem',
+        width: 'calc(100% - 16rem)', height: '5rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 3rem',
+        background: theme === 'dark' ? 'rgba(27, 29, 14, 0.8)' : 'rgba(251, 251, 226, 0.8)',
+        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+        zIndex: 40,
+      }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+          {viewLabels[view] || 'Dashboard'}
+        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Search insights..."
+              style={{
+                background: 'var(--bg-card-hover)', border: 'none', borderRadius: '9999px',
+                padding: '0.5rem 1rem 0.5rem 2.5rem', width: '16rem', fontSize: '0.875rem',
+                color: 'var(--text-primary)', fontFamily: "'Inter', sans-serif",
+              }}
+            />
+            <span className="material-symbols-outlined" style={{
+              position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--text-muted)', fontSize: '18px',
+            }}>search</span>
           </div>
-          <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-primary)' }}>
+            <button onClick={fetchAll} disabled={syncing} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: 'inherit',
+              display: 'flex', alignItems: 'center',
+            }}>
+              {syncing ? <Loader2 size={20} className="animate-spin" /> : <span className="material-symbols-outlined">sync</span>}
+            </button>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>
+              <span className="material-symbols-outlined">notifications</span>
+            </button>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className="material-symbols-outlined">account_circle</span>
+              <span style={{ fontSize: '0.875rem', fontWeight: 600, letterSpacing: '-0.01em' }}>{user?.email?.split('@')[0] || 'Curator'}</span>
+            </button>
+          </div>
         </div>
+      </header>
 
-        <div className="page-body">
+      {/* ═══ MAIN CONTENT CANVAS ═══ */}
+      <main style={{ marginLeft: '16rem', paddingTop: '5rem', minHeight: '100vh' }} className="organic-glow">
+        <div style={{ padding: '3rem', maxWidth: '1600px', margin: '0 auto' }}>
+          <div className="organic-view-container" style={{ animation: 'fade-in 0.4s cubic-bezier(0.25, 1, 0.5, 1)' }}>
           {view === 'news' && (
             <NewsView
               news={news}
@@ -277,47 +409,64 @@ function App() {
               messages={chatMessages} setMessages={setChatMessages}
               input={chatInput} setInput={setChatInput}
               onEditDraft={async (idx) => {
-                // 1. Check if we already have it locally
                 if (drafts.some(d => String(d.row_index) === String(idx))) {
                   setHighlightedDraftId(idx);
                   setView('approval');
                   return;
                 }
-
                 setSyncing(true);
-                // Exponential backoff retry loop (up to 5 attempts)
                 let found = false;
                 let delay = 400;
                 for (let attempt = 0; attempt < 5; attempt++) {
                   try {
                     const res = await axios.get(`${API_BASE}/content/pending`);
                     const latestDrafts = res.data;
-                    
                     if (latestDrafts.some(d => String(d.row_index) === String(idx))) {
                       setDrafts(latestDrafts);
                       found = true;
                       break;
                     }
                   } catch (e) { console.error('Retry fetch drafts:', e); }
-                  
                   console.log(`Draft ${idx} not found, retrying in ${delay}ms...`);
                   await new Promise(r => setTimeout(r, delay));
                   delay *= 2;
                 }
-                
                 setHighlightedDraftId(idx);
                 setView('approval');
                 setSyncing(false);
-                if (!found) console.warn(`Draft ${idx} not found after retries. It might appear in the next Sync.`);
+                if (!found) console.warn(`Draft ${idx} not found after retries.`);
               }}
             />
           )}
           {view === 'settings' && <SettingsView accentTheme={accentTheme} setAccentTheme={setAccentTheme} />}
+          {view === 'brand-identity' && <BrandIdentitySettings onSave={fetchActiveBrand} />}
+          {view === 'calendar' && <CalendarDashboard brandId={activeBrand?.id} />}
+          </div>
         </div>
       </main>
+
+      {/* ═══ FLOATING AI ACTION BUTTON — Stitch ═══ */}
+      <button
+        onClick={() => setView('ai-chat')}
+        style={{
+          position: 'fixed', bottom: '2rem', right: '2rem',
+          width: '56px', height: '56px', borderRadius: '50%',
+          background: '#5d4cbf', color: 'white', border: 'none',
+          boxShadow: '0 8px 30px rgba(93, 76, 191, 0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', zIndex: 50,
+          transition: 'transform 0.3s, box-shadow 0.3s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(93, 76, 191, 0.45)'; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 30px rgba(93, 76, 191, 0.35)'; }}
+        title="Ask AI Assistant"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: '28px', fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+      </button>
     </div>
   );
 }
+
 
 /* ============================================
    VIEW — News Radar (Default)
@@ -402,6 +551,26 @@ function NewsView({ news, onRefresh, syncing, onSkip, setDrafts, setView }) {
     setGenerating(false);
   };
 
+  const handleMergeGenerate = async (newsIds) => {
+    if (newsIds.length < 2) {
+      alert('Please select at least 2 news items to merge.');
+      return;
+    }
+    setGenerating(true);
+    try {
+      await axios.post(`${API_BASE}/news/merge-generate`, { news_ids: newsIds });
+      setGeneratedNodes(prev => [...prev, ...newsIds]);
+      setSelectedNews([]);
+      const draftsRes = await axios.get(`${API_BASE}/content/pending`);
+      setDrafts(draftsRes.data);
+      onRefresh();
+      setView('approval');
+    } catch (e) {
+      alert('Merging error: ' + (e.response?.data?.detail || e.message));
+    }
+    setGenerating(false);
+  };
+
   const handleCustomGenerate = async () => {
     if (!fetchTopic.trim()) {
       setFetchError('Please type some news content first to generate a custom post.');
@@ -481,9 +650,14 @@ function NewsView({ news, onRefresh, syncing, onSkip, setDrafts, setView }) {
       {selectedNews.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--gradient-accent)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem', color: 'white' }}>
           <span><strong>{selectedNews.length}</strong> articles selected</span>
-          <button className="btn btn-sm" style={{ background: 'white', color: 'var(--primary)' }} onClick={() => handleGenerate(selectedNews)} disabled={generating}>
-            {generating ? <><Loader2 size={14} className="animate-spin" /> Generating...</> : <><Layers size={14} /> Generate Posts</>}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn btn-sm" style={{ background: 'white', color: 'var(--primary)' }} onClick={() => handleGenerate(selectedNews)} disabled={generating}>
+              {generating ? <><Loader2 size={14} className="animate-spin" /> ...</> : <><Layers size={14} /> Individual Drafts</>}
+            </button>
+            <button className="btn btn-sm" style={{ background: 'var(--theme-accent)', color: 'white', border: '1px solid white' }} onClick={() => handleMergeGenerate(selectedNews)} disabled={generating}>
+              {generating ? <><Loader2 size={14} className="animate-spin" /> ...</> : <><Sparkles size={14} /> Merge & Generate</>}
+            </button>
+          </div>
         </div>
       )}
 
@@ -829,7 +1003,7 @@ function MediaView({ media, pinnedImage, onPin, onDelete, onUpload, onRefresh, s
 function SettingsView({ accentTheme, setAccentTheme }) {
   const SECTIONS = ['Appearance', 'AI Provider', 'Social Publishing', 'News Sources', 'News Preferences', 'Media Storage', 'Google Sheets'];
   const [active, setActive] = useState('Appearance');
-  const [prefs, setPrefs] = useState({ topics: '', post_time: '07:00', is_enabled: 1 });
+  const [prefs, setPrefs] = useState({ topics: '', post_time: '07:00', is_enabled: 1, news_limit: 10 });
   const [savingPrefs, setSavingPrefs] = useState(false);
 
   useEffect(() => {
@@ -839,7 +1013,8 @@ function SettingsView({ accentTheme, setAccentTheme }) {
           setPrefs({
             topics: res.data.preferences.topics || '',
             post_time: res.data.preferences.post_time || '07:00',
-            is_enabled: res.data.preferences.is_enabled !== undefined ? res.data.preferences.is_enabled : 1
+            is_enabled: res.data.preferences.is_enabled !== undefined ? res.data.preferences.is_enabled : 1,
+            news_limit: res.data.preferences.news_limit || 10
           });
         }
       }).catch(console.error);
@@ -996,6 +1171,25 @@ function SettingsView({ accentTheme, setAccentTheme }) {
                     className="akc-input"
                     value={prefs.post_time}
                     onChange={(e) => setPrefs({ ...prefs, post_time: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="akc-card">
+                <div className="akc-header" style={{ marginBottom: '0.75rem' }}>
+                  <div className="akc-label-row">
+                    <div className="akc-label">News Search Limit</div>
+                  </div>
+                </div>
+                <div className="akc-help" style={{ marginTop: '-0.5rem', marginBottom: '1rem' }}>Maximum number of news items to fetch per session</div>
+                <div className="akc-input-row">
+                  <input
+                    type="number"
+                    className="akc-input"
+                    value={prefs.news_limit}
+                    onChange={(e) => setPrefs({ ...prefs, news_limit: parseInt(e.target.value) || 0 })}
+                    min="1"
+                    max="50"
                   />
                 </div>
               </div>

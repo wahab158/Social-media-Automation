@@ -1,6 +1,6 @@
 import os
 from groq import Groq
-from sqlite_helper import get_api_key as sqlite_get_key
+from db_sql_helper import get_api_key as sqlite_get_key
 
 def analyze_image_with_vision(image_url: str, user_id: str = None) -> str:
     """

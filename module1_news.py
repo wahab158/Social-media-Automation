@@ -5,11 +5,11 @@ import feedparser
 import requests
 from groq import Groq
 from dotenv import load_dotenv
-from db_helper import DBHelper
+import db_content_helper as dbcontent
 from tavily import TavilyClient
 
-# Import sqlite_helper for multi-tenant keys
-from sqlite_helper import get_api_key as sqlite_get_key
+# Import db_sql_helper for multi-tenant keys
+from db_sql_helper import get_api_key as sqlite_get_key
 
 # Load environment variables
 load_dotenv()
@@ -193,15 +193,7 @@ def run_news_agent(custom_query=None, user_id=None):
         print("No news found from any source.")
         return 0, "No news found."
 
-    # 2. Connect to DB
-    try:
-        db = DBHelper()
-        db.connect()
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return
-
-    # 3. Process each article
+    # 2. Add News to DB
     saved_count = 0
     date_found = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -213,28 +205,20 @@ def run_news_agent(custom_query=None, user_id=None):
         if not title or title == "Removed":
             continue
             
-        existing_urls = []
-        try:
-            existing_urls = db.news_sheet.col_values(4)
-        except Exception:
-            pass 
-            
-        if url in existing_urls:
-            continue
-            
         # Summarize with AI
         summary, category, trendiness = summarize_and_categorize_news(title, desc, client)
         
-        # Save to sheet
+        # Save to DB
         try:
             # We'll prepend [TRENDING] to title if high potential
             display_title = f"[TRENDING] {title}" if trendiness == "High" else title
             source_name = article.get("source", "Unknown")
             relevance = article.get("relevance", "")
             
-            success = db.add_news_row(
+            success = dbcontent.add_news_row(
                 display_title, summary, category, url, date_found, 
-                status="New", source_name=source_name, relevance_score=relevance
+                status="New", source_name=source_name, relevance_score=relevance,
+                user_id=user_id
             )
             if success:
                 print(f"Added: [{category}] {display_title[:40]}...")

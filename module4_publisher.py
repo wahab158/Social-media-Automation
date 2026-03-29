@@ -5,9 +5,9 @@ import re
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
-from db_helper import DBHelper
+import db_content_helper as dbcontent
 
-from sqlite_helper import get_api_key as sqlite_get_key
+from db_sql_helper import get_api_key as sqlite_get_key
 
 def upload_to_ayrshare_storage(local_path, user_id=None):
     """
@@ -194,14 +194,7 @@ def is_time_to_post(schedule_time_str):
 def run_publisher(user_id=None):
     print(f"[{datetime.now()}] Starting Publishing Agent for user {user_id or 'System'}...")
     
-    try:
-        db = DBHelper()
-        db.connect()
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return
-
-    approved_posts = db.get_approved_content()
+    approved_posts = dbcontent.get_approved_content()
     if not approved_posts:
         print("No 'Approved' posts waiting in the queue.")
         return
@@ -209,7 +202,7 @@ def run_publisher(user_id=None):
     for post in approved_posts:
         topic = post.get("topic", "Unknown")
         schedule_time = post.get("schedule_time", "now")
-        row_index = post.get("_row_index")
+        row_index = post.get("row_index")
         
         if not is_time_to_post(schedule_time):
             continue
@@ -249,28 +242,16 @@ def run_publisher(user_id=None):
         posted_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            db.update_content_status(row_index, final_status, links, posted_time)
+            dbcontent.update_content_status(row_index, final_status, links, posted_time)
             print(f"[{topic[:30]}] Publication status: {final_status}")
         except Exception as e:
-            print(f"Error updating Sheet status: {e}")
+            print(f"Error updating DB status: {e}")
 
-def publish_single(row_index):
+def publish_single(row_index, user_id=None):
     """Publish a specific row by its row_index."""
-    print(f"[{datetime.now()}] Publishing single row {row_index}...")
+    print(f"[{datetime.now()}] Publishing single row {row_index} for user {user_id or 'System'}...")
     
-    try:
-        db = DBHelper()
-        db.connect()
-    except Exception as e:
-        raise Exception(f"Database connection error: {e}")
-
-    records = db.content_sheet.get_all_records()
-    row_data = None
-    for i, r in enumerate(records):
-        if i + 2 == row_index:
-            row_data = r
-            break
-    
+    row_data = dbcontent.get_content_by_id(row_index)
     if not row_data:
         raise Exception(f"Row {row_index} not found")
     
@@ -297,12 +278,12 @@ def publish_single(row_index):
         
         links = {p: link_id for p in platforms_to_post}
         posted_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        db.update_content_status(row_index, "Posted", links, posted_time)
+        dbcontent.update_content_status(row_index, "Posted", links, posted_time)
         print(f"[{topic[:30]}] Published successfully!")
         return f"Published to {len(platforms_to_post)} platforms"
     except Exception as e:
         posted_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        db.update_content_status(row_index, "Failed", {}, posted_time)
+        dbcontent.update_content_status(row_index, "Failed", {}, posted_time)
         raise Exception(f"Publishing failed: {e}")
 
 
